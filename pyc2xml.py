@@ -6,7 +6,10 @@ import time
 intern_str = []
 
 def main():
-    a = open('./show.pyc')
+    script,fname = sys.argv
+    while not fname.endswith('.pyc'):
+        fname = raw_input('input a pyc file >\n')
+    a = open(fname)
     b = a.read()
     a.close()
     x = struct.unpack_from('c'*len(b),b)
@@ -72,6 +75,11 @@ def parse_code(pyc,cursor):
     cursor += stringlen
     cursor += 4
     figure = pyc[cursor]
+    args = [a,b,c]
+    tmp_list.append(a)
+    tmp_list.append(b)
+    tmp_list.append(c)
+    tmp_list.append(stringlen)
     for i in range(8):
         if figure in "sti(NcR{":
             one = parse_obj(pyc,cursor)
@@ -148,103 +156,87 @@ class parse_pyc():
         lnotab,self.cursor = parse_obj(self.pycfile,self.cursor)
         return list(lnotab)
 
-def output(parsed):
+def out(parsed_file):
+    a,b,c = parsed_file.get_all_args()
+    code_len = parsed_file.get_code()
+    consts = parsed_file.get_consts()
+    names = parsed_file.get_names()
+    varnames = parsed_file.get_varnames()
+    freevars = parsed_file.get_freevars()
+    cellvars = parsed_file.get_cellvars()
+    filename = parsed_file.get_filename()
+    name = parsed_file.get_names()
+    firstLineNo = parsed_file.get_lineno()
+    return [a,b,c,code_len,consts,names,varnames,freevars,cellvars,filename,\
+            name,firstLineNo]
+
+
+def output_child(parsed_lst):
+    xml_tags = ['argCount','localCount','stackSize','Code','consts','names','varnames','freevars','cellvars','filename','name','firseLineNo']
     doc = minidom.Document()
-    pycfile = doc.createElement("Pycfile")
-    codeobj = doc.createElement('CodeObject')
-    argCount = doc.createElement('argCount')
-    args_total = parsed.get_all_args()
-    argCount.setAttribute('value',str(args_total[0]))
-    codeobj.appendChild(argCount)
-    localCount = doc.createElement("localCount")
-    localCount.setAttribute('value',str(args_total[1]))
-    codeobj.appendChild(localCount)
-    stackSize = doc.createElement('stackSize')
-    stackSize.setAttribute("value",str(args_total[2]))
-    codeobj.appendChild(stackSize)              #all the arguments
-    
-    code_len = parsed.get_code()
-    code = doc.createElement('code')
-    code_str = doc.createElement('str')
-    code_str.setAttribute('length',str(code_len))
-    code_str.setAttribute('value','binary')
-    code.appendChild(code_str)
-    codeobj.appendChild(code)                   #add the code seg
+    pycfile = doc.createElement("PycFile")
+    codeobj = doc.createElement('codeObject')
+    for i in range(len(parsed_lst)):
+        tmp_node = doc.createElement(xml_tags[i])
+        if i >= 0 and i < 3:
+            tmp_node.setAttribute("value",str(parsed_lst[i]))
+        elif i == 3:
+            sub_node = doc.createElement('str')
+            sub_node.setAttribute('len',str(parsed_lst[i]))
+            tmp_node.appendChild(sub_node)
+        elif i == 4:
+            for j in parsed_lst[i]:
+                if isinstance(j,list):
+                    sub_node = doc.createElement("codeObject")
+                    sub_node.appendChild(output_child(j))
+                    tmp_node.appendChild(sub_node)
+                elif isinstance(j,int):
+                    sub_node = doc.createElement('int')
+                    sub_node.setAttribute('value',str(j))
+                    tmp_node.appendChild(sub_node)
+                elif isinstance(j,str):
+                    tiny = j.split()
+                    if tiny[0] == 't':
+                        sub_node = doc.createElement('internStr')
+                        sub_node.setAttribute('index',str(intern_str.index(j)))
+                    else:
+                        sub_node = doc.createElement('Str')
+                    sub_node.setAttribute('length',str(len(tiny[1])))
+                    sub_node.setAttribute('value',tiny[1])
+                    tmp_node.appendChild(sub_node)
+                else:
+                    sub_node = doc.createElement("NoneObject")
+                    tmp_node.appendChild(sub_node)
+        else:
+            if isinstance(parsed_lst[i],str):
+                parsed_lst[i] = [parsed_lst[i]]
+            for j in parsed_lst[i]:
+                if isinstance(j,int):
+                    sub_node = doc.createElement('int')
+                    sub_node.setAttribute('value',str(j))
+                    tmp_node.appendChild(sub_node)
+                elif isinstance(j,str):
+                    tiny = j.split()
+                    if tiny[0] == 't':
+                        sub_node = doc.createElement('internStr')
+                        sub_node.setAttribute('index',str(intern_str.index(j)))
+                    else:
+                        sub_node = doc.createElement('Str')
+                    sub_node.setAttribute('length',str(len(tiny[1])))
+                    sub_node.setAttribute('value',tiny[1])
+                    tmp_node.appendChild(sub_node)
+                else:
+                    sub_node = doc.createElement('NoneObject')
+                    tmp_node.appendChild(sub_node)
 
-    consts = doc.createElement('consts')
-    parsed_const = parsed.get_consts()
-    add_subitems(parsed_const,consts,doc)
-
-    names = doc.createElement("names")
-    parsed_names = parsed.get_names()
-    add_subitems(parsed_names,names,doc)
-
-    varnames = doc.createElement('varnames')
-    parsed_varnames = parsed.get_varnames()
-    add_subitems(parsed_varnames,varnames,doc)
-
-    freevars = doc.createElement('freevars')
-    parsed_freevars = parsed.get_freevars()
-    add_subitems(parsed_freevars,freevars,doc)
-
-    cellvars = doc.createElement('cellvars')
-    parsed_cellvars = parsed.get_cellvars()
-    add_subitems(parsed_cellvars,cellvars,doc)
-
-    filename = doc.createElement('filename')
-    parsed_filename = parsed.get_filename()
-    add_subitems(parsed_filename,filename,doc)
-
-    name = doc.createElement('name')
-    parsed_name = parsed.get_names()
-    add_subitems(parsed_name,name,doc)
-
-    firstLineNo = doc.createElement('firstLineNo')
-    parsed_firstLN = parsed.get_lineno()
-    add_subitems(parsed_firstLN,firstLineNo,doc)
-
-    #lnotab = doc.createElement('lnotab')
-    #parsed_lnotab = parsed.get_lnotab()
-    #add_subitems(parsed_lnotab,lnotab,doc)
-
-    codeobj.appendChild(consts)
-    codeobj.appendChild(names)
-    codeobj.appendChild(varnames)
-    codeobj.appendChild(freevars)
-    codeobj.appendChild(cellvars)
-    codeobj.appendChild(filename)
-    codeobj.appendChild(name)
-    codeobj.appendChild(firstLineNo)
+        codeobj.appendChild(tmp_node)
     pycfile.appendChild(codeobj)
     doc.appendChild(pycfile)
-    return doc.toprettyxml(indent='    ')
-
-
-def add_subitems(parsed_item,parent_node,doc):
-    if isinstance(parsed_item,str):
-        parsed_item = [parsed_item]
-    for i in parsed_item:
-        if isinstance(i,int):
-            sub_item = doc.createElement('int')
-            sub_item.setAttribute('value',str(i))
-        elif isinstance(i,str):
-            tiny = i.split()
-            if tiny[0] == 't':
-                sub_item = doc.createElement('internStr')
-                sub_item.setAttribute('index',str(intern_str.index(i)))
-            else:
-                sub_item = doc.createElement('Str')
-            sub_item.setAttribute('length',str(len(tiny[1])))
-            sub_item.setAttribute('value',tiny[1])
-        elif isinstance(i,list):
-            sub_item = doc.createElement('codeObject')
-        else:
-            sub_item = doc.createElement('NoneObject')
-        parent_node.appendChild(sub_item)
-
+    return pycfile
 
 
 if __name__ == "__main__":
     pycfile = main()
     parse_py = parse_pyc(pycfile)
-    print output(parse_py)
+    doc = output_child(out(parse_py))
+    print doc.toprettyxml(indent='    ')
